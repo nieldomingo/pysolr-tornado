@@ -10,9 +10,9 @@ import time
 import types
 import ast
 
-from tornado.client import (AsyncHTTPClient,
-                            HTTPRequest,
-                            HTTPError,)
+from tornado.httpclient import (AsyncHTTPClient,
+                                HTTPRequest,
+                                HTTPError,)
 from tornado.gen import (coroutine,
                          Return,)
 
@@ -250,7 +250,7 @@ class SolrTornado(object):
     def _request_object(self, url, **kwargs):
         # TODO: handle files argument later
         req = HTTPRequest(url,
-                          method=kwargs['method'],
+                          method=kwargs['method'].upper(),
                           headers=kwargs['headers'],
                           body=kwargs['body'],
                           request_timeout=kwargs['request_timeout'])
@@ -291,9 +291,6 @@ class SolrTornado(object):
                 for k, v in headers.items():
                     bytes_headers[force_bytes(k)] = force_bytes(v)
 
-            resp = requests_method(url, data=bytes_body, headers=bytes_headers, files=files,
-                                   timeout=self.timeout)
-
             req = self._request_object(url,
                                        method=method,
                                        headers=bytes_headers,
@@ -303,7 +300,7 @@ class SolrTornado(object):
             resp = yield self.http_client.fetch(req)
 
         except HTTPError as err:
-            if err.code == 599
+            if err.code == 599:
                 error_message = "Connection to server '%s' timed out: %s"
                 self.log.error(error_message, url, err, exc_info=True)
                 raise SolrTornadoError(error_message % (url, err))
@@ -317,7 +314,7 @@ class SolrTornado(object):
         self.log.info("Finished '%s' (%s) with body '%s' in %0.3f seconds.",
                       url, method, log_body[:10], end_time - start_time)
 
-        if int(resp.status_code) != 200:
+        if int(resp.code) != 200:
             error_message = self._extract_error(resp)
             self.log.error(error_message, extra={'data': {'headers': resp.headers,
                                                           'response': resp.body}})
@@ -641,7 +638,7 @@ class SolrTornado(object):
         response = result.get('response') or {}
         numFound = response.get('numFound', 0)
         self.log.debug("Found '%s' search results.", numFound)
-        raise Result(Results(response.get('docs', ()), numFound, **result_kwargs))
+        raise Return(Results(response.get('docs', ()), numFound, **result_kwargs))
 
     @coroutine
     def more_like_this(self, q, mltfl, **kwargs):
@@ -671,7 +668,7 @@ class SolrTornado(object):
             }
 
         self.log.debug("Found '%s' MLT results.", result['response']['numFound'])
-        raise Result(Results(result['response']['docs'], result['response']['numFound']))
+        raise Return(Results(result['response']['docs'], result['response']['numFound']))
 
     @coroutine
     def suggest_terms(self, fields, prefix, **kwargs):
@@ -710,7 +707,7 @@ class SolrTornado(object):
             res[field] = tmp
 
         self.log.debug("Found '%d' Term suggestions results.", sum(len(j) for i, j in res.items()))
-        raise Result(res)
+        raise Return(res)
 
     def _build_doc(self, doc, boost=None):
         doc_elem = ET.Element('doc')
@@ -950,7 +947,7 @@ class SolrTornado(object):
             while raw_metadata:
                 metadata[raw_metadata.pop()] = raw_metadata.pop()
 
-        return data
+        raise Return(data)
 
 
 class SolrCoreAdmin(object):

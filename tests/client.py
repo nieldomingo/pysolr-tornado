@@ -2,6 +2,8 @@
 from __future__ import unicode_literals
 
 import datetime
+import requests
+import json
 
 from pysolr_tornado import (SolrTornado, Results, SolrTornadoError, unescape_html,
                             safe_urlencode, force_unicode, force_bytes, sanitize,
@@ -107,7 +109,7 @@ class ResultsTestCase(unittest.TestCase):
 
 
 class SolrTestCase(AsyncTestCase):
-    @gen_test
+
     def setUp(self):
         super(SolrTestCase, self).setUp()
         self.default_solr = SolrTornado('http://localhost:8983/solr/core0')
@@ -145,18 +147,20 @@ class SolrTestCase(AsyncTestCase):
                 'popularity': 2,
             },
         ]
+        
+        self.solr.delete(q='*:*')
+        requests.post('http://localhost:8983/solr/core0/update',
+                      headers={'Content-Type': 'text/xml'},
+                      data='<delete><query>*:*</query></delete>')
 
-        # Clear it.
-        yield self.solr.delete(q='*:*')
 
-        # Index our docs. Yes, this leans on functionality we're going to test
-        # later & if it's broken, everything will catastrophically fail.
-        # Such is life.
-        yield self.solr.add(self.docs)
+        requests.post('http://localhost:8983/solr/core0/update/json?commit=true',
+                      headers={'Content-type': 'application/json'},
+                      data=json.dumps(self.docs))
 
-    @gen_test
+
     def tearDown(self):
-        yield self.solr.delete(q='*:*')
+        self.solr.delete(q='*:*')
         super(SolrTestCase, self).tearDown()
 
     def test_init(self):
@@ -360,8 +364,8 @@ class SolrTestCase(AsyncTestCase):
 
     @gen_test
     def test_add(self):
-        self.assertEqual(len(yield self.solr.search('doc')), 3)
-        self.assertEqual(len(yield self.solr.search('example')), 2)
+        self.assertEqual(len((yield self.solr.search('doc'))), 3)
+        self.assertEqual(len((yield self.solr.search('example'))), 2)
 
         self.solr.add([
             {
@@ -374,12 +378,12 @@ class SolrTestCase(AsyncTestCase):
             },
         ])
 
-        self.assertEqual(len(yield self.solr.search('doc')), 5)
-        self.assertEqual(len(yield self.solr.search('example')), 3)
+        self.assertEqual(len((yield self.solr.search('doc'))), 5)
+        self.assertEqual(len((yield self.solr.search('example'))), 3)
 
     @gen_test
     def test_add_with_boost(self):
-        self.assertEqual(len(yield self.solr.search('doc')), 3)
+        self.assertEqual(len((yield self.solr.search('doc'))), 3)
 
         yield self.solr.add([{'id': 'doc_6', 'title': 'Important doc'}],
                             boost={'title': 10.0})
@@ -393,15 +397,15 @@ class SolrTestCase(AsyncTestCase):
 
     @gen_test
     def test_delete(self):
-        self.assertEqual(len(yield self.solr.search('doc')), 3)
+        self.assertEqual(len((yield self.solr.search('doc'))), 3)
         yield self.solr.delete(id='doc_1')
-        self.assertEqual(len(yield self.solr.search('doc')), 2)
+        self.assertEqual(len((yield self.solr.search('doc'))), 2)
         yield self.solr.delete(q='price:[0 TO 15]')
-        self.assertEqual(len(yield self.solr.search('doc')), 1)
+        self.assertEqual(len((yield self.solr.search('doc'))), 1)
 
-        self.assertEqual(len(yield self.solr.search('*:*')), 1)
+        self.assertEqual(len((yield self.solr.search('*:*'))), 1)
         yield self.solr.delete(q='*:*')
-        self.assertEqual(len(yield self.solr.search('*:*')), 0)
+        self.assertEqual(len((yield self.solr.search('*:*'))), 0)
 
         # Need at least one.
         #self.assertRaises(ValueError, self.solr.delete)
@@ -422,30 +426,31 @@ class SolrTestCase(AsyncTestCase):
 
     @gen_test
     def test_commit(self):
-        self.assertEqual(len(yield self.solr.search('doc')), 3)
+        self.assertEqual(len((yield self.solr.search('doc'))), 3)
         yield self.solr.add([
             {
                 'id': 'doc_6',
                 'title': 'Newly added doc',
             }
         ], commit=False)
-        self.assertEqual(len(yield self.solr.search('doc')), 3)
+        self.assertEqual(len((yield self.solr.search('doc'))), 3)
         yield self.solr.commit()
-        self.assertEqual(len(yield self.solr.search('doc')), 4)
+        self.assertEqual(len((yield self.solr.search('doc'))), 4)
+
 
     @gen_test
     def test_optimize(self):
         # Make sure it doesn't blow up. Side effects are hard to measure. :/
-        self.assertEqual(len(self.solr.search('doc')), 3)
+        self.assertEqual(len((yield self.solr.search('doc'))), 3)
         self.solr.add([
             {
                 'id': 'doc_6',
                 'title': 'Newly added doc',
             }
         ], commit=False)
-        self.assertEqual(len(self.solr.search('doc')), 3)
+        self.assertEqual(len((yield self.solr.search('doc'))), 3)
         self.solr.optimize()
-        self.assertEqual(len(self.solr.search('doc')), 4)
+        self.assertEqual(len((yield self.solr.search('doc'))), 4)
 
     @gen_test
     def test_extract(self):
