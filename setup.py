@@ -10,7 +10,7 @@ setup(
     description="Tornado client library for Apache Solr",
     author='Nathaniel Domingo',
     author_email='niel.domingo@gmail.com',
-    long_description="converted the pysolr library to work with tornado"
+    long_description="converted the pysolr library to work with tornado",
     py_modules=[
         'pysolr_tornado',
     ],
