@@ -54,14 +54,7 @@ except NameError:
     # Ugh.
     long = int
 
-
-__author__ = 'Daniel Lindsley, Joseph Kocherhans, Jacob Kaplan-Moss'
-__all__ = ['Solr']
-__version__ = (3, 0, 5)
-
-
-def get_version():
-    return "%s.%s.%s" % __version__[:3]
+from encode_multipart import encode_multipart_formdata
 
 
 DATETIME_REGEX = re.compile('^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(\.\d+)?Z$')
@@ -284,12 +277,19 @@ class SolrTornado(object):
             bytes_body = body
             bytes_headers = {}
 
-            if bytes_body is not None:
-                bytes_body = force_bytes(body)
-
             if headers is not None:
                 for k, v in headers.items():
                     bytes_headers[force_bytes(k)] = force_bytes(v)
+
+            if files is not None:
+                file_info = [(k, fname, fd.read()) for (k, (fname, fd)) in files.items()]
+                content_type, bytes_body = encode_multipart_formdata([] if body is None else body.items(),
+                                                                     file_info)
+                bytes_headers['Content-Type'] = content_type
+
+            elif bytes_body is not None:
+                bytes_body = force_bytes(body)
+
 
             req = self._request_object(url,
                                        method=method,
@@ -920,10 +920,9 @@ class SolrTornado(object):
         try:
             # We'll provide the file using its true name as Tika may use that
             # as a file type hint:
-            resp_body = yield self._send_request('post', 'update/extract',
-                                                 body=params,
-                                                 files={'file': (file_obj.name, file_obj)})
-            raise Return(resp_body)
+            resp = yield self._send_request('post', 'update/extract',
+                                            body=params,
+                                            files={'file': (file_obj.name, file_obj)})
         except (IOError, SolrTornadoError) as err:
             self.log.error("Failed to extract document metadata: %s", err,
                            exc_info=True)
